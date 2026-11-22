@@ -1,5 +1,5 @@
 
-name: DouyinLite v0.4.1 iOS + watchOS + IPA
+name: DouyinLite v0.6 iOS + watchOS CI
 
 on:
   workflow_dispatch:
@@ -7,12 +7,15 @@ on:
     branches:
       - main
     paths:
-      - "DouyinLite-v0.4.1-public-video-source.zip"
+      - "*v0.6*.zip"
       - ".github/workflows/ios-watchos-ci.yml"
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    name: Build iOS watchOS and IPA
+    name: Build iOS, watchOS and IPA
     runs-on: macos-15
 
     steps:
@@ -22,25 +25,44 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Extract source
+      - name: Locate and extract v0.6 source
+        shell: bash
         run: |
-          mkdir -p source
-          unzip -q DouyinLite-v0.4.1-public-video-source.zip -d source
-          PROJECT_FILE=$(find source -name project.yml -print -quit)
-          if [ -z "$PROJECT_FILE" ]; then
-            echo "project.yml not found"
+          set -euo pipefail
+
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*v0.6*.zip' | sort | tail -n 1)"
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: v0.6 source ZIP not found in repository root."
             exit 1
           fi
-          echo "PROJECT_DIR=$(dirname "$PROJECT_FILE")" >> "$GITHUB_ENV"
+
+          echo "Using source: $ZIP_FILE"
+          mkdir -p source
+          unzip -q "$ZIP_FILE" -d source
+
+          PROJECT_FILE="$(find source -name project.yml -print -quit)"
+
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "ERROR: project.yml not found."
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$PROJECT_FILE")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Generate Xcode project
         run: |
+          set -euo pipefail
           cd "$PROJECT_DIR"
           xcodegen generate
+          test -d DouyinLite.xcodeproj
 
       - name: Build iOS Simulator
         run: |
+          set -euo pipefail
           cd "$PROJECT_DIR"
+
           xcodebuild \
             -project DouyinLite.xcodeproj \
             -scheme DouyinLite \
@@ -51,56 +73,88 @@ jobs:
 
       - name: Build watchOS Simulator
         run: |
+          set -euo pipefail
           cd "$PROJECT_DIR"
+
           xcodebuild \
             -project DouyinLite.xcodeproj \
             -scheme DouyinLiteWatch \
             -destination 'generic/platform=watchOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Archive iOS for device
+      - name: Archive iOS app
         run: |
+          set -euo pipefail
           cd "$PROJECT_DIR"
+
           xcodebuild \
             -project DouyinLite.xcodeproj \
             -scheme DouyinLite \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/DouyinLite.xcarchive" \
+            -archivePath "$RUNNER_TEMP/DouyinLite-v0.6.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
             archive
 
-      - name: Export unsigned IPA
+      - name: Verify embedded Watch App
         run: |
-          mkdir -p "$RUNNER_TEMP/IPA/Payload"
-          APP_PATH="$RUNNER_TEMP/DouyinLite.xcarchive/Products/Applications/DouyinLite.app"
+          set -euo pipefail
+
+          APP_PATH="$RUNNER_TEMP/DouyinLite-v0.6.xcarchive/Products/Applications/DouyinLite.app"
 
           if [ ! -d "$APP_PATH" ]; then
-            echo "Archived app not found"
+            echo "ERROR: iOS app not found in archive."
             exit 1
           fi
 
+          WATCH_PATH="$APP_PATH/Watch"
+
+          if [ ! -d "$WATCH_PATH" ]; then
+            echo "ERROR: Watch directory missing. Watch App is not embedded."
+            exit 1
+          fi
+
+          WATCH_APP="$(find "$WATCH_PATH" -maxdepth 1 -type d -name '*.app' -print -quit)"
+
+          if [ -z "$WATCH_APP" ]; then
+            echo "ERROR: Embedded Watch .app not found."
+            exit 1
+          fi
+
+          echo "Watch App embedded successfully:"
+          echo "$WATCH_APP"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+
+          APP_PATH="$RUNNER_TEMP/DouyinLite-v0.6.xcarchive/Products/Applications/DouyinLite.app"
+
+          mkdir -p "$RUNNER_TEMP/IPA/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/IPA/Payload/"
+
           cd "$RUNNER_TEMP/IPA"
-          zip -qr "$RUNNER_TEMP/DouyinLite-v0.4.1-unsigned.ipa" Payload
+          zip -qr "$RUNNER_TEMP/DouyinLite-v0.6-unsigned.ipa" Payload
+
+          test -s "$RUNNER_TEMP/DouyinLite-v0.6-unsigned.ipa"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: DouyinLite-v0.4.1-IPA
-          path: ${{ runner.temp }}/DouyinLite-v0.4.1-unsigned.ipa
+          name: DouyinLite-v0.6-unsigned-IPA
+          path: ${{ runner.temp }}/DouyinLite-v0.6-unsigned.ipa
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload simulator builds
-        if: success()
+      - name: Upload build products
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: DouyinLite-v0.4.1-build
+          name: DouyinLite-v0.6-build-diagnostics
           path: |
             ${{ runner.temp }}/DerivedData/Build/Products
-          if-no-files-found: error
+            ${{ runner.temp }}/DouyinLite-v0.6.xcarchive/Info.plist
+          if-no-files-found: warn
           retention-days: 14
