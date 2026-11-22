@@ -1,50 +1,60 @@
 
-name: DouyinLite iOS and watchOS CI
+name: DouyinLite v0.4 iOS + watchOS CI
 
 on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "DouyinLite-v0.4-public-video-source.zip"
+      - ".github/workflows/ios-watchos-ci.yml"
 
 jobs:
   build:
+    name: Build iOS and watchOS
     runs-on: macos-15
-    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          brew install xcodegen
 
-      - name: Extract v0.3 source
+      - name: Extract v0.4 source
         run: |
           mkdir -p source
-          unzip -q DouyinLite-v0.3-source.zip -d source
+          unzip -q DouyinLite-v0.4-public-video-source.zip -d source
+
           PROJECT_FILE=$(find source -name project.yml -print -quit)
+
           if [ -z "$PROJECT_FILE" ]; then
-            echo "找不到 project.yml"
+            echo "ERROR: project.yml not found"
             exit 1
           fi
+
           echo "PROJECT_DIR=$(dirname "$PROJECT_FILE")" >> "$GITHUB_ENV"
 
       - name: Generate Xcode project
         run: |
           cd "$PROJECT_DIR"
           xcodegen generate
-          xcodebuild -list
+
+      - name: Show Xcode schemes
+        run: |
+          cd "$PROJECT_DIR"
+          xcodebuild -list -project DouyinLite.xcodeproj
 
       - name: Build iOS Simulator
         run: |
           cd "$PROJECT_DIR"
           xcodebuild \
+            -project DouyinLite.xcodeproj \
             -scheme DouyinLite \
             -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug \
-            -derivedDataPath "$RUNNER_TEMP/DouyinLiteDerived" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             build
 
@@ -52,18 +62,19 @@ jobs:
         run: |
           cd "$PROJECT_DIR"
           xcodebuild \
+            -project DouyinLite.xcodeproj \
             -scheme DouyinLiteWatch \
             -destination 'generic/platform=watchOS Simulator' \
-            -configuration Debug \
-            -derivedDataPath "$RUNNER_TEMP/DouyinLiteDerived" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Upload build products
+      - name: Upload v0.4 build products
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: DouyinLite-v0.3-build
-          path: ${{ runner.temp }}/DouyinLiteDerived/Build/Products/
+          name: DouyinLite-v0.4-build
+          path: |
+            ${{ runner.temp }}/DerivedData/Build/Products
           if-no-files-found: error
           retention-days: 14
