@@ -1,5 +1,5 @@
 
-name: DouyinLite v0.4 iOS + watchOS CI
+name: DouyinLite v0.4.1 iOS + watchOS CI
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
     branches:
       - main
     paths:
-      - "DouyinLite-v0.4-public-video-source.zip"
+      - "DouyinLite-v0.4.1-public-video-source.zip"
       - ".github/workflows/ios-watchos-ci.yml"
 
 jobs:
@@ -23,10 +23,10 @@ jobs:
         run: |
           brew install xcodegen
 
-      - name: Extract v0.4 source
+      - name: Extract v0.4.1 source
         run: |
           mkdir -p source
-          unzip -q DouyinLite-v0.4-public-video-source.zip -d source
+          unzip -q DouyinLite-v0.4.1-public-video-source.zip -d source
 
           PROJECT_FILE=$(find source -name project.yml -print -quit)
 
@@ -71,11 +71,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Upload v0.4 build products
+      - name: Upload v0.4.1 build products
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: DouyinLite-v0.4-build
+          name: DouyinLite-v0.4.1-build
           path: |
             ${{ runner.temp }}/DerivedData/Build/Products
           if-no-files-found: error
