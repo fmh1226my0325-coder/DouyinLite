@@ -26,6 +26,7 @@ jobs:
       - name: Extract v0.4 source
         run: |
           mkdir -p source
+
           unzip -q DouyinLite-v0.4-public-video-source.zip -d source
 
           PROJECT_FILE=$(find source -name project.yml -print -quit)
@@ -35,6 +36,7 @@ jobs:
             exit 1
           fi
 
+          echo "Found project: $PROJECT_FILE"
           echo "PROJECT_DIR=$(dirname "$PROJECT_FILE")" >> "$GITHUB_ENV"
 
       - name: Generate Xcode project
@@ -66,6 +68,8 @@ jobs:
             -scheme DouyinLiteWatch \
             -destination 'generic/platform=watchOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -arch arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
             build
 
